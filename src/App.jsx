@@ -29,11 +29,15 @@ async function getToken() {
   }
 
   console.log(supersetApiUrl + '/login')
-  await axios.post(
+  const loginResp = await axios.post(
     supersetApiUrl + '/login',
     login_body,
     login_headers,
   )
+  const accessToken = loginResp?.data?.access_token
+  if (!accessToken) {
+    throw new Error('No access_token returned from Superset login')
+  }
   // access_token not used on client; backend fetches guest token
 
   // Fetch CSRF token (required on some Superset setups for POSTing guest_token)
@@ -58,11 +62,16 @@ async function getToken() {
   // Headers for direct call kept here for reference; backend call used instead
 
   // Prefer server-side token generation to satisfy referrer/CSRF checks
-  console.log('/api/guest-token')
+  console.log('/api/v1/security/guest-token')
   const dt = await axios.post(
-    '/api/guest-token',
+    '/api/v1/security/guest-token',
     { dashboardId, rls: guest_token_body.rls, user: guest_token_body.user },
-    { headers: { 'Content-Type': 'application/json' } },
+    {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
   )
   return dt.data['token']
 }
@@ -77,7 +86,7 @@ function App() {
     ;(async () => {
       try {
         const token = await getToken()
-        await embedDashboard({
+        await embedDashboard({  
           id: dashboardId, // given by the Superset embedding UI
           supersetDomain: supersetUrl,
           mountPoint: document.getElementById('superset-container'), // html element in which iframe renders
